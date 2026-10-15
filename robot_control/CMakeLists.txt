@@ -10,6 +10,19 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(telemetry_interfaces REQUIRED)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+add_executable(robot_simulator_node src/robot_simulator_node.cpp)
+ament_target_dependencies(robot_simulator_node rclcpp geometry_msgs nav_msgs telemetry_interfaces)
+
+install(TARGETS
+  robot_simulator_node
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

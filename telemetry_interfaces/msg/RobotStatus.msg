@@ -1,0 +1,5 @@
+float32 battery_percentage
+float32 linear_velocity
+float32 angular_velocity
+bool emergency_stop
+string current_state
