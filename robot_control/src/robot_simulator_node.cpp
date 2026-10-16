@@ -6,8 +6,13 @@
 #include "geometry_msgs/msg/twist.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "telemetry_interfaces/msg/robot_status.hpp"
+#include "telemetry_interfaces/srv/reset_robot.hpp"
+
+using RobotStatus = telemetry_interfaces::msg::RobotStatus;
+using ResetRobot = telemetry_interfaces::srv::ResetRobot;
 
 using std::placeholders::_1;
+using std::placeholders::_2;
 
 class RobotSimulatorNode : public rclcpp::Node
 {
@@ -24,7 +29,8 @@ public:
     timer_ = this->create_wall_timer(std::chrono::milliseconds(100), std::bind(&RobotSimulatorNode::update_and_send_pose, this));
     cmd_vel_subscription_ = this->create_subscription<geometry_msgs::msg::Twist>("cmd_vel", 10, std::bind(&RobotSimulatorNode::subscription_callback, this, _1));
     odom_pose_publisher_ = this->create_publisher<nav_msgs::msg::Odometry>("odom_pose", 10);
-    robot_status_publisher_ = this->create_publisher<telemetry_interfaces::msg::RobotStatus>("robot_status", 10);
+    robot_status_publisher_ = this->create_publisher<RobotStatus>("robot_status", 10);
+    robot_reset_server_ = this->create_service<ResetRobot>("reset_robot", std::bind(&RobotSimulatorNode::reset_robot_callback,this,_1,_2), 10);
   }
 
 private:
@@ -83,6 +89,17 @@ private:
     }
   }
 
+  void reset_robot_callback(const std::shared_ptr<ResetRobot::Request> request, std::shared_ptr<ResetRobot::Response> response)
+  {
+    x_ = 0;
+    y_ = 0;
+    theta_ = 0;
+    response->success = true;
+    response->message = "robot reset successful.";
+
+    RCLCPP_INFO(this->get_logger(), "Robot Reset Successful");
+  }
+
   double delta_t = 0.1; // same as timer callback period
   double linear_velocity_;
   double angular_velocity_;
@@ -100,7 +117,8 @@ private:
   rclcpp::TimerBase::SharedPtr timer_;
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_subscription_;
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pose_publisher_;
-  rclcpp::Publisher<telemetry_interfaces::msg::RobotStatus>::SharedPtr robot_status_publisher_;
+  rclcpp::Publisher<RobotStatus>::SharedPtr robot_status_publisher_;
+  rclcpp::Service<ResetRobot>::SharedPtr robot_reset_server_;
 };
 
 int main(int argc, char *argv[])
