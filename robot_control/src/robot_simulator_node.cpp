@@ -3,13 +3,18 @@
 #include <algorithm>
 
 #include "rclcpp/rclcpp.hpp"
+#include "rclcpp_action/rclcpp_action.hpp"
+
 #include "geometry_msgs/msg/twist.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "telemetry_interfaces/msg/robot_status.hpp"
 #include "telemetry_interfaces/srv/reset_robot.hpp"
+#include "telemetry_interfaces/action/drive_distance.hpp"
 
 using RobotStatus = telemetry_interfaces::msg::RobotStatus;
 using ResetRobot = telemetry_interfaces::srv::ResetRobot;
+using DriveDistance = telemetry_interfaces::action::DriveDistance;
+using GoalHandleDriveDistance = rclcpp_action::ServerGoalHandle<DriveDistance>;
 
 using std::placeholders::_1;
 using std::placeholders::_2;
@@ -30,10 +35,39 @@ public:
     cmd_vel_subscription_ = this->create_subscription<geometry_msgs::msg::Twist>("cmd_vel", 10, std::bind(&RobotSimulatorNode::subscription_callback, this, _1));
     odom_pose_publisher_ = this->create_publisher<nav_msgs::msg::Odometry>("odom_pose", 10);
     robot_status_publisher_ = this->create_publisher<RobotStatus>("robot_status", 10);
-    robot_reset_server_ = this->create_service<ResetRobot>("reset_robot", std::bind(&RobotSimulatorNode::reset_robot_callback,this,_1,_2), 10);
+    robot_reset_server_ = this->create_service<ResetRobot>("reset_robot", std::bind(&RobotSimulatorNode::reset_robot_callback, this, _1, _2), 10);
+    action_drive_server_ = rclcpp_action::create_server<DriveDistance>(this, "drive_distance",
+                                                                       std::bind(&RobotSimulatorNode::handle_drive_distance_goal, this, _1, _2),
+                                                                       std::bind(&RobotSimulatorNode::handle_drive_distance_cancel_goal, this, _1),
+                                                                       std::bind(&RobotSimulatorNode::handle_drive_distance_accept_goal, this, _1));
   }
 
 private:
+  rclcpp_action::GoalResponse handle_drive_distance_goal(const rclcpp_action::GoalUUID &uuid, const std::shared_ptr<const DriveDistance::Goal> goal)
+  {
+    RCLCPP_INFO(this->get_logger(), "Received drive distance goal request");
+    (void)uuid;
+    (void)goal;
+    if (active_goal_)
+    {
+      RCLCPP_INFO(this->get_logger(), "Already action server is working on a goal.");
+      return rclcpp_action::GoalResponse::REJECT;
+    }
+    return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+  }
+
+  rclcpp_action::CancelResponse handle_drive_distance_cancel_goal(const std::shared_ptr<GoalHandleDriveDistance> goal_handle)
+  {
+    RCLCPP_INFO(this->get_logger(), "Received drive distance goal cancel request");
+    (void)goal_handle;
+    return rclcpp_action::CancelResponse::ACCEPT;
+  }
+
+  void handle_drive_distance_accept_goal(const std::shared_ptr<GoalHandleDriveDistance> goal_handle)
+  {
+    active_goal_ = goal_handle;
+  }
+
   void update_and_send_pose()
   {
     x_ = x_ + (linear_velocity_ * cos(angular_velocity_) * delta_t);
@@ -68,6 +102,28 @@ private:
     robot_status_msg.emergency_stop = 0;
 
     robot_status_publisher_->publish(robot_status_msg);
+
+    if (active_goal_)
+    {
+      auto goal = active_goal_->get_goal();
+      if (x_ >= goal->target_distance)
+      {
+        auto result = std::make_shared<DriveDistance::Result>();
+        result->success = true;
+        result->distance_travelled = x_;
+        result->message = "action goal completed succesfully.";
+
+        RCLCPP_INFO(this->get_logger(), "Action goal completed successfully.");
+        active_goal_->succeed(result);
+      }
+      else
+      {
+        auto feedback = std::make_shared<DriveDistance::Feedback>();
+        feedback->distance_travelled = x_;
+        RCLCPP_INFO(this->get_logger(), "Action feedback sent successfully.");
+        active_goal_->publish_feedback(feedback);
+      }
+    }
   }
 
   void subscription_callback(const geometry_msgs::msg::Twist::SharedPtr msg)
@@ -91,6 +147,7 @@ private:
 
   void reset_robot_callback(const std::shared_ptr<ResetRobot::Request> request, std::shared_ptr<ResetRobot::Response> response)
   {
+    (void)request;
     x_ = 0;
     y_ = 0;
     theta_ = 0;
@@ -111,6 +168,7 @@ private:
   double max_linear_velocity_;
   double max_angular_velocity_;
   double max_publish_rate_;
+  std::shared_ptr<GoalHandleDriveDistance> active_goal_;
 
   std::string robot_current_state_ = "STOPPED";
 
@@ -119,6 +177,7 @@ private:
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pose_publisher_;
   rclcpp::Publisher<RobotStatus>::SharedPtr robot_status_publisher_;
   rclcpp::Service<ResetRobot>::SharedPtr robot_reset_server_;
+  rclcpp_action::Server<DriveDistance>::SharedPtr action_drive_server_;
 };
 
 int main(int argc, char *argv[])

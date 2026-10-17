@@ -1,0 +1,7 @@
+float32 target_distance
+---
+bool success
+float64 distance_travelled
+string message
+---
+float64 distance_travelled
