@@ -53,6 +53,16 @@ private:
       RCLCPP_INFO(this->get_logger(), "Already action server is working on a goal.");
       return rclcpp_action::GoalResponse::REJECT;
     }
+    if (goal->target_distance <= 0)
+    {
+      RCLCPP_INFO(this->get_logger(), "Goal rejected. target distance cannot be negative.");
+      return rclcpp_action::GoalResponse::REJECT;
+    }
+    if (goal->target_distance <= x_)
+    {
+      RCLCPP_INFO(this->get_logger(), "Goal rejected. target distance cannot be less than or equal to current robot position.");
+      return rclcpp_action::GoalResponse::REJECT;
+    }
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
   }
 
@@ -60,6 +70,7 @@ private:
   {
     RCLCPP_INFO(this->get_logger(), "Received drive distance goal cancel request");
     (void)goal_handle;
+    active_goal_.reset();
     return rclcpp_action::CancelResponse::ACCEPT;
   }
 
@@ -70,9 +81,32 @@ private:
 
   void update_and_send_pose()
   {
-    x_ = x_ + (linear_velocity_ * cos(angular_velocity_) * delta_t);
-    y_ = y_ + (linear_velocity_ * sin(angular_velocity_) * delta_t);
-    theta_ = theta_ + (angular_velocity_ * delta_t);
+    if (active_goal_ && active_goal_->is_active())
+    {
+      x_ = x_ + (linear_velocity_ * cos(angular_velocity_) * delta_t);
+      y_ = y_ + (linear_velocity_ * sin(angular_velocity_) * delta_t);
+      theta_ = theta_ + (angular_velocity_ * delta_t);
+    }
+
+    if (!active_goal_ || !active_goal_->is_active())
+    {
+      robot_current_state_ = "STOPPED";
+    }
+    if (active_goal_ && active_goal_->is_active())
+    {
+      if (linear_velocity_ == 0.0 && angular_velocity_ == 0.0)
+      {
+        robot_current_state_ = "STOPPED";
+      }
+      else if (linear_velocity_ == 0.0 && angular_velocity_ != 0.0)
+      {
+        robot_current_state_ = "ROTATING";
+      }
+      else
+      {
+        robot_current_state_ = "MOVING";
+      }
+    }
 
     auto odom_msg = nav_msgs::msg::Odometry();
 
@@ -114,7 +148,12 @@ private:
         result->message = "action goal completed succesfully.";
 
         RCLCPP_INFO(this->get_logger(), "Action goal completed successfully.");
+
+        linear_velocity_ = 0;
+        angular_velocity_ = 0;
         active_goal_->succeed(result);
+        active_goal_.reset();
+        robot_current_state_ = "STOPPED";
       }
       else
       {
@@ -130,31 +169,26 @@ private:
   {
     linear_velocity_ = std::clamp(msg->linear.x, -max_linear_velocity_, max_linear_velocity_);
     angular_velocity_ = std::clamp(msg->angular.z, -max_angular_velocity_, max_angular_velocity_);
-
-    if (linear_velocity_ == 0.0 && angular_velocity_ == 0.0)
-    {
-      robot_current_state_ = "STOPPED";
-    }
-    else if (linear_velocity_ == 0.0 && angular_velocity_ != 0.0)
-    {
-      robot_current_state_ = "ROTATING";
-    }
-    else
-    {
-      robot_current_state_ = "MOVING";
-    }
   }
 
   void reset_robot_callback(const std::shared_ptr<ResetRobot::Request> request, std::shared_ptr<ResetRobot::Response> response)
   {
     (void)request;
+    if (active_goal_ && active_goal_->is_active())
+    {
+      response->success = false;
+      response->message = "Cannot reset robot while goal is active.";
+
+      RCLCPP_INFO(this->get_logger(), "Robot reset unsuccessful");
+      return;
+    }
     x_ = 0;
     y_ = 0;
     theta_ = 0;
     response->success = true;
     response->message = "robot reset successful.";
 
-    RCLCPP_INFO(this->get_logger(), "Robot Reset Successful");
+    RCLCPP_INFO(this->get_logger(), "Robot reset successful");
   }
 
   double delta_t = 0.1; // same as timer callback period
