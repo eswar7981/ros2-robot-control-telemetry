@@ -20,9 +20,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_executable(robot_simulator_node src/robot_simulator_node.cpp)
 ament_target_dependencies(robot_simulator_node rclcpp rclcpp_action geometry_msgs nav_msgs telemetry_interfaces)
 
-install(TARGETS
-  robot_simulator_node
+install(
+  TARGETS robot_simulator_node
   DESTINATION lib/${PROJECT_NAME}
+)
+
+install(
+  DIRECTORY config
+  DESTINATION share/${PROJECT_NAME}
 )
 
 if(BUILD_TESTING)

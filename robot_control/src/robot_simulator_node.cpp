@@ -10,6 +10,7 @@
 #include "telemetry_interfaces/msg/robot_status.hpp"
 #include "telemetry_interfaces/srv/reset_robot.hpp"
 #include "telemetry_interfaces/action/drive_distance.hpp"
+#include "rcl_interfaces/msg/set_parameters_result.hpp"
 
 using RobotStatus = telemetry_interfaces::msg::RobotStatus;
 using ResetRobot = telemetry_interfaces::srv::ResetRobot;
@@ -26,12 +27,14 @@ public:
   {
     max_linear_velocity_ = this->declare_parameter<std::double_t>("max_linear_speed", 1.0);
     max_angular_velocity_ = this->declare_parameter<std::double_t>("max_angular_speed", 1.0);
-    max_publish_rate_ = this->declare_parameter<std::double_t>("publish_rate", 10.0);
+    publish_rate_ = this->declare_parameter<std::double_t>("publish_rate", 10.0);
 
     auto period = std::chrono::duration<double>(
-        1.0 / max_publish_rate_);
+        1.0 / publish_rate_);
 
-    timer_ = this->create_wall_timer(std::chrono::milliseconds(100), std::bind(&RobotSimulatorNode::update_and_send_pose, this));
+    callback_handle_ = this->add_on_set_parameters_callback(std::bind(&RobotSimulatorNode::parametersCallback, this, _1));
+
+    timer_ = this->create_wall_timer(std::chrono::duration_cast<std::chrono::milliseconds>(period), std::bind(&RobotSimulatorNode::update_and_send_pose, this));
     cmd_vel_subscription_ = this->create_subscription<geometry_msgs::msg::Twist>("cmd_vel", 10, std::bind(&RobotSimulatorNode::subscription_callback, this, _1));
     odom_pose_publisher_ = this->create_publisher<nav_msgs::msg::Odometry>("odom_pose", 10);
     robot_status_publisher_ = this->create_publisher<RobotStatus>("robot_status", 10);
@@ -43,6 +46,30 @@ public:
   }
 
 private:
+  rcl_interfaces::msg::SetParametersResult parametersCallback(const std::vector<rclcpp::Parameter> &parameters)
+  {
+    rcl_interfaces::msg::SetParametersResult result;
+    result.successful = true;
+
+    for (const auto &param : parameters)
+    {
+      if (param.get_name() == "publish_rate")
+      {
+        publish_rate_ = param.as_double();
+      }
+      else if (param.get_name() == "max_linear_speed")
+      {
+        max_linear_velocity_ = param.as_double();
+      }
+      else if (param.get_name() == "max_angular_speed")
+      {
+        max_angular_velocity_ = param.as_double();
+      }
+    }
+
+    return result;
+  }
+
   rclcpp_action::GoalResponse handle_drive_distance_goal(const rclcpp_action::GoalUUID &uuid, const std::shared_ptr<const DriveDistance::Goal> goal)
   {
     RCLCPP_INFO(this->get_logger(), "Received drive distance goal request");
@@ -167,6 +194,16 @@ private:
 
   void subscription_callback(const geometry_msgs::msg::Twist::SharedPtr msg)
   {
+    if (msg->linear.x > max_linear_velocity_)
+    {
+      RCLCPP_WARN(this->get_logger(), "Max linear velocity allowed : %.2f", max_linear_velocity_);
+      return;
+    }
+    if (msg->angular.z > max_angular_velocity_)
+    {
+      RCLCPP_WARN(this->get_logger(), "Max angular velocity allows: %.2f", max_angular_velocity_);
+      return;
+    }
     linear_velocity_ = std::clamp(msg->linear.x, -max_linear_velocity_, max_linear_velocity_);
     angular_velocity_ = std::clamp(msg->angular.z, -max_angular_velocity_, max_angular_velocity_);
   }
@@ -201,7 +238,7 @@ private:
 
   double max_linear_velocity_;
   double max_angular_velocity_;
-  double max_publish_rate_;
+  double publish_rate_;
   std::shared_ptr<GoalHandleDriveDistance> active_goal_;
 
   std::string robot_current_state_ = "STOPPED";
@@ -212,6 +249,8 @@ private:
   rclcpp::Publisher<RobotStatus>::SharedPtr robot_status_publisher_;
   rclcpp::Service<ResetRobot>::SharedPtr robot_reset_server_;
   rclcpp_action::Server<DriveDistance>::SharedPtr action_drive_server_;
+
+  OnSetParametersCallbackHandle::SharedPtr callback_handle_;
 };
 
 int main(int argc, char *argv[])
