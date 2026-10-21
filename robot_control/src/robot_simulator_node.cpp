@@ -55,12 +55,12 @@ private:
     }
     if (goal->target_distance <= 0)
     {
-      RCLCPP_INFO(this->get_logger(), "Goal rejected. target distance cannot be negative.");
+      RCLCPP_WARN(this->get_logger(), "Goal rejected. target distance cannot be negative.");
       return rclcpp_action::GoalResponse::REJECT;
     }
     if (goal->target_distance <= x_)
     {
-      RCLCPP_INFO(this->get_logger(), "Goal rejected. target distance cannot be less than or equal to current robot position.");
+      RCLCPP_WARN(this->get_logger(), "Goal rejected. target distance cannot be less than or equal to current robot position.");
       return rclcpp_action::GoalResponse::REJECT;
     }
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
