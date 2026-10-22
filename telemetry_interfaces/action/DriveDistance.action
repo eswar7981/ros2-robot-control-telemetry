@@ -1,7 +1,10 @@
 float32 target_distance
+int32 rotation_angle
 ---
 bool success
 float64 distance_travelled
+int32 angle_rotated
 string message
 ---
 float64 distance_travelled
+int32 angle_rotated

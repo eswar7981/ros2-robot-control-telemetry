@@ -90,6 +90,11 @@ private:
       RCLCPP_WARN(this->get_logger(), "Goal rejected. target distance cannot be less than or equal to current robot position.");
       return rclcpp_action::GoalResponse::REJECT;
     }
+    if (goal->rotation_angle < 0 || goal->rotation_angle > 360)
+    {
+      RCLCPP_WARN(this->get_logger(), "Goal rejected. invalid rotation angle, should be between 0° and 360°");
+      return rclcpp_action::GoalResponse::REJECT;
+    }
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
   }
 
@@ -97,6 +102,7 @@ private:
   {
     RCLCPP_INFO(this->get_logger(), "Received drive distance goal cancel request");
     (void)goal_handle;
+    distance_travelled_ = 0;
     active_goal_.reset();
     return rclcpp_action::CancelResponse::ACCEPT;
   }
@@ -110,9 +116,17 @@ private:
   {
     if (active_goal_ && active_goal_->is_active())
     {
-      x_ = x_ + (linear_velocity_ * cos(angular_velocity_) * delta_t);
-      y_ = y_ + (linear_velocity_ * sin(angular_velocity_) * delta_t);
-      theta_ = theta_ + (angular_velocity_ * delta_t);
+      auto goal = active_goal_->get_goal();
+      if (goal->rotation_angle && theta_ <= goal->rotation_angle)
+      {
+        theta_ = theta_ + (angular_velocity_ * delta_t);
+      }
+      else
+      {
+        x_ = x_ + (linear_velocity_ * cos(angular_velocity_) * delta_t);
+        y_ = y_ + (linear_velocity_ * sin(angular_velocity_) * delta_t);
+        distance_travelled_ += std::abs(linear_velocity_) * delta_t;
+      }
     }
 
     if (!active_goal_ || !active_goal_->is_active())
@@ -167,17 +181,17 @@ private:
     if (active_goal_)
     {
       auto goal = active_goal_->get_goal();
-      if (x_ >= goal->target_distance)
+      if (distance_travelled_ >= goal->target_distance && theta_ >= goal->rotation_angle)
       {
         auto result = std::make_shared<DriveDistance::Result>();
         result->success = true;
-        result->distance_travelled = x_;
+        result->distance_travelled = distance_travelled_;
+        result->angle_rotated = theta_;
         result->message = "action goal completed succesfully.";
 
         RCLCPP_INFO(this->get_logger(), "Action goal completed successfully.");
 
-        linear_velocity_ = 0;
-        angular_velocity_ = 0;
+        distance_travelled_ = 0;
         active_goal_->succeed(result);
         active_goal_.reset();
         robot_current_state_ = "STOPPED";
@@ -185,7 +199,8 @@ private:
       else
       {
         auto feedback = std::make_shared<DriveDistance::Feedback>();
-        feedback->distance_travelled = x_;
+        feedback->distance_travelled = distance_travelled_;
+        feedback->angle_rotated = theta_;
         RCLCPP_INFO(this->get_logger(), "Action feedback sent successfully.");
         active_goal_->publish_feedback(feedback);
       }
@@ -235,6 +250,7 @@ private:
   double x_ = 0;
   double y_ = 0;
   double theta_ = 0;
+  double distance_travelled_ = 0;
 
   double max_linear_velocity_;
   double max_angular_velocity_;
