@@ -6,7 +6,7 @@
 TEST(RobotSimulatorTest, RotateBy90Degrees)
 {
   const double current_heading = 0.0;
-  const double angular_velocity = std::acos(-1.0) / 2.0;
+  const double angular_velocity = 5.0 * std::acos(-1.0);
   const double dt = 0.1;
 
   const double actual_heading =
