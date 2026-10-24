@@ -4,6 +4,7 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
+#include "robot_control/robot_motion_utils.hpp"
 
 #include "geometry_msgs/msg/twist.hpp"
 #include "nav_msgs/msg/odometry.hpp"
@@ -85,8 +86,8 @@ private:
       RCLCPP_INFO(this->get_logger(), "Already action server is working on a goal.");
       return rclcpp_action::GoalResponse::REJECT;
     }
-    if (goal->target_distance <= 0) {
-      RCLCPP_WARN(this->get_logger(), "Goal rejected. target distance cannot be negative.");
+    if (!isValidDistanceGoal(goal->target_distance)) {
+      RCLCPP_WARN(this->get_logger(), "Goal rejected. target distance cannot be negative or zero.");
       return rclcpp_action::GoalResponse::REJECT;
     }
     if (goal->target_distance <= x_) {
@@ -94,7 +95,7 @@ private:
         "Goal rejected. target distance cannot be less than or equal to current robot position.");
       return rclcpp_action::GoalResponse::REJECT;
     }
-    if (goal->rotation_angle < 0 || goal->rotation_angle > 360) {
+    if (!isValidRotationAngle(goal->rotation_angle)) {
       RCLCPP_WARN(this->get_logger(),
         "Goal rejected. invalid rotation angle, should be between 0° and 360°");
       return rclcpp_action::GoalResponse::REJECT;
@@ -208,8 +209,8 @@ private:
       RCLCPP_WARN(this->get_logger(), "Max angular velocity allows: %.2f", max_angular_velocity_);
       return;
     }
-    linear_velocity_ = std::clamp(msg->linear.x, -max_linear_velocity_, max_linear_velocity_);
-    angular_velocity_ = std::clamp(msg->angular.z, -max_angular_velocity_, max_angular_velocity_);
+    linear_velocity_ = getClampVelocity(msg->linear.x, max_linear_velocity_);
+    angular_velocity_ = getClampVelocity(msg->angular.z, max_angular_velocity_);
   }
 
   void reset_robot_callback(
