@@ -11,7 +11,6 @@ find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
-find_package(std_msgs REQUIRED)
 find_package(telemetry_interfaces REQUIRED)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -55,9 +54,11 @@ if(BUILD_TESTING)
     test/test_robot_simulator.cpp
   )
 
+  if(TARGET test_robot_simulator)
   target_include_directories(test_robot_simulator PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
   )
+  endif()
 
 endif()
 

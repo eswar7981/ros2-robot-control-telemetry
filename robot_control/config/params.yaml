@@ -1,6 +1,6 @@
 robot_simulator_node:
   ros__parameters:
     max_linear_speed: 1.00
-    max_angular_speed: 2.00
+    max_angular_speed: 1.00
     publish_rate: 10.0
 

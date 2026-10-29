@@ -67,9 +67,17 @@ TEST(RobotSimulatorTest, RotationAngleValidation)
   EXPECT_FALSE(isValidRotationAngle(361));
 }
 
-TEST(RobotSimulatorTest, RobotVelocityValidation)
+TEST(VelocityClamp, ClampsPositiveVelocity)
 {
-  EXPECT_DOUBLE_EQ(getClampVelocity(0.8, 1.0), 0.8);
-  EXPECT_DOUBLE_EQ(getClampVelocity(0.8, 0.5), 0.5);
-  EXPECT_DOUBLE_EQ(getClampVelocity(-0.8, 0.5), -0.5);
+    EXPECT_DOUBLE_EQ(getClampVelocity(2.0, 0.5), 0.5);
+}
+
+TEST(VelocityClamp, ClampsNegativeVelocity)
+{
+    EXPECT_DOUBLE_EQ(getClampVelocity(-2.0, 0.5), -0.5);
+}
+
+TEST(VelocityClamp, PreservesVelocityWithinLimits)
+{
+    EXPECT_DOUBLE_EQ(getClampVelocity(0.4, 0.5), 0.4);
 }
